@@ -1,5 +1,8 @@
 #include <Wire.h>
 
+#include <SoftwareSerial.h>
+  SoftwareSerial esp(2,3);
+  
 #include <LiquidCrystal_I2C.h>
   LiquidCrystal_I2C lcd = LiquidCrystal_I2C (0x27,16,2);
 
@@ -17,7 +20,7 @@
 
 float wlevel, wtemperature;
 
-long waits = 0;
+long wait[2] = {0,0};
 
 int relay_pin[5] = {8,7,6,5,4};
 boolean rstatus[5] = {0,0,0,0,0};
@@ -28,16 +31,15 @@ boolean edit = false;
 
 void setup() {
   Serial.begin(9600);
-
+  
+  esp.begin(9600);
+  
   lcd.begin();
   lcd.backlight();
   lcd.clear();
   lcd.print("HELLO");
   
   rtc.begin();
-
-  Serial.println("\n================= START =================\n");
-  Serial.println("Jam: " + String(rtc.getTimeStr()) + "\n");
 
   pinMode(echo_pin, INPUT);
   pinMode(trig_pin, OUTPUT);
@@ -52,15 +54,25 @@ void setup() {
     relay(r,rstatus[r]);
   }
 
+  Serial.println("\nConnecting..");
+  while(!esp.available());
+  Serial.write(esp.read());
+  
   delay(1000);
 }
 
 void loop() {
   
-  if (millis() > waits){
+  if (millis() > wait[0]){
     lcd_show(lstatus);
-    waits = millis() + 200;
+    wait[0] = millis() + 300;
   }
+  
+  if (millis() > wait[1]){
+    
+  }
+  
+  getting();
   
   button();
 }
@@ -145,7 +157,24 @@ void relay_manual(int value){
 void relay(int num, int value){
   digitalWrite(relay_pin[num], 1-value);
   rstatus[num] = value;
-  Serial.println("Relay " + String(num) + " : " + String(rstatus[num] ? "ON" : "OFF") );
+  Serial.println(" - Relay " + String(num) + " : " + String(rstatus[num] ? "ON" : "OFF") );
+  updating(num+10, rstatus[num]);
+}
+
+void getting(){
+  if (esp.available()){
+    int datain[2];
+    Serial.print("DATAIN: ");
+    for (int i = 0; i < 2; i++) {
+      datain[i] = esp.parseInt();
+      Serial.print(String(datain[i]) + " ");
+    }
+    if (datain[1]>=10 && datain[1]<=14) relay(datain[1]-10,datain[0]);
+  }
+}
+
+void updating(int num, int value){
+  esp.print(String(rstatus[num-10]) + "," + String(value));
 }
 
 void water_level(){
